@@ -21,7 +21,7 @@ if TAVILY_API_KEY:
 def initialize_workflow():
     web_search = TavilySearch(max_results=3) if TAVILY_API_KEY else None
 
-    llm = ChatGroq(model_name="gemma2-9b-it", max_tokens=5000)
+    llm = ChatGroq(model_name="llama-3.3-70b-versatile", max_tokens=5000)
 
     research_agent_prompt = ChatPromptTemplate.from_messages([
         ("system", """You are a research agent. Use Tavily to fetch the latest, most relevant fitness and nutrition information for the user's needs. Summarize findings clearly and concisely for the plan generator. If you can provide a direct answer from your knowledge base or research, do so. Otherwise, indicate if further research is needed or if you are done."""
@@ -44,7 +44,7 @@ def initialize_workflow():
             Ensure all required fields for the plan are identified from these messages. 
             
             Your output MUST be a comprehensive, well-structured fitness and nutrition plan, using clear markdown headings and bullet points. DO NOT include any conversational filler, introductory, or concluding remarks. Just provide the plan.
-The plan should include:
+            The plan should include:
             
             # Weekly Gym Training Plan
             (Detailed exercises with sets, reps, rest for each day of the week, including rest days)
