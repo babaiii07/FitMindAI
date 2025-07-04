@@ -7,33 +7,37 @@ from langchain_tavily import TavilySearch
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, BaseMessage, AIMessage, FunctionMessage
 from langchain_core.tools import tool
+from langchain_groq import ChatGroq
 
 load_dotenv()
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-if GOOGLE_API_KEY:
-    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+if GROQ_API_KEY:
+    os.environ["GOOGLE_API_KEY"] = GROQ_API_KEY
 if TAVILY_API_KEY:
     os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
 def initialize_workflow():
     web_search = TavilySearch(max_results=3) if TAVILY_API_KEY else None
 
-    llm = ChatGoogleGenerativeAI(model="models/gemini-1.5-pro", temperature=0.2, max_output_tokens=2048)
+    llm = ChatGroq(model="llama-3.3-70b-versatile",max_tokens=2000)
 
     research_agent_prompt = ChatPromptTemplate.from_messages([
-        ("system", '''You are a research agent. Use Tavily to fetch the latest, most relevant fitness and nutrition information for the user's needs in India. 
-- Always prioritize up-to-date, actionable data from current sources, including:
-    - Popular diets and food preferences in India
-    - Average gym membership costs and home workout alternatives
-    - Budget-friendly, locally available foods and prices in INR
-    - Effective exercises tailored to different goals (weight loss, muscle gain, endurance)
-    - Culturally relevant meals and affordable substitutions
-    - Scientific findings or official guidelines
-- Provide accurate data with links to sources where available.
-- Keep answers structured and concise. If research is complete, indicate readiness.'''),
+        ("system", '''You are a research agent. Use Tavily and any other available internet resources to fetch the latest, most relevant fitness and nutrition information for the user's needs.
+- Always prioritize up-to-date, actionable data from the current internet, including:
+    - Food preferences and trending diets in the user's region
+    - Typical gym membership costs and home workout alternatives
+    - Cost-effective, budget-friendly meal options and food prices (in INR)
+    - Popular exercises and routines for the user's goal and experience
+    - Local/cultural foods and substitutions
+    - Any recent scientific findings or government guidelines
+- For ALL food and gym costs, always provide the price in INR (₹), with links to sources (grocery sites, government, news, etc.).
+- Use multiple sources if possible, and always cite links for cost data.
+- Summarize findings clearly and concisely for the plan generator, with sources and links where possible.
+- If you can provide a direct answer from your knowledge base or research, do so. Otherwise, indicate if further research is needed or if you are done.
+'''),
         MessagesPlaceholder(variable_name="messages"),
     ])
 
@@ -43,41 +47,26 @@ def initialize_workflow():
         prompt=research_agent_prompt,
         name="research_agent",
     )
-
+    
     plan_prompt = ChatPromptTemplate.from_messages([
-        ("system", '''You are a certified fitness coach and nutrition expert. Create a personalized weekly gym training and daily meal plan for the user based on provided inputs and research findings.
-Output format must be markdown with proper headings and bullet points.
-
-The plan must include:
-
-# 🏋️ Weekly Gym Training Plan
-- Break down the weekly workout by day.
-- For each day, specify:
-    - Target muscle group or focus (e.g., legs, push, cardio)
-    - Exercises with sets × reps × rest time
-    - Home and gym variations
-    - Estimated daily cost for gym usage (in ₹ INR)
-
-# 🍽️ Daily Meal Plan
-- For each day (Mon–Sun), include:
-    - Breakfast, lunch, dinner, snacks
-    - Calories per meal
-    - Key nutrients (protein, carbs, fats)
-    - Price per meal in ₹ INR (based on average Indian prices)
-
-# 🧘 Lifestyle & Wellness Tips
-- Tips for hydration, sleep, stress, recovery
-- Tips for staying healthy and on budget in India
-
-# 💡 Summary
-- Weekly calorie intake
-- Total weekly food cost (₹)
-- Total weekly gym cost (₹)
-- Key recommendations and scientific insights used (with links if available)
-
-Use clear formatting, avoid filler text, and focus only on the structured plan.'''),
+        ("system", '''You are a world-class fitness coach and nutritionist. Your task is to create a highly personalized, actionable, and safe gym training and nutrition plan.
+- Use all user details and the latest research findings provided by the research agent.
+- Your plan MUST be:
+    - Comprehensive, well-structured, and actionable
+    - Use markdown tables for all plans (especially the weekly meal plan and gym plan)
+    - Include:
+        # Weekly Gym Training Plan
+        (Provide a markdown table: Days as rows, columns for muscle group/focus, exercises, sets, reps, rest, gym/home alternative, and estimated daily gym cost in INR. Include rest days.)
+        # Weekly Meal Plan
+        (Provide a markdown table: Days as rows, columns for breakfast, lunch, dinner, snacks, calories, protein, carbs, fats, and estimated daily food cost in INR. Use locally available, budget-friendly foods. All prices in INR. Add links to sources if possible.)
+        # Lifestyle Tips
+        (Bullet points: hydration, sleep, stress, recovery, budget tips, and any recent scientific advice. Include tips for staying on budget and using local resources.)
+        # Summary
+        (Markdown table: total weekly food cost (INR), total weekly gym cost (INR), weekly calorie intake, and key recommendations. List all sources/links used for cost data.)
+- Do NOT include any conversational filler, introductory, or concluding remarks. Just provide the plan in structured markdown tables and bullet points.
+'''),
         MessagesPlaceholder(variable_name="messages"),
-        ("human", "Generate the personalized gym and nutrition plan using the details and research provided."),
+        ("human", "Generate the personalized gym training and nutrition plan based on the extracted user details and research findings.")
     ])
 
     plan_agent = create_react_agent(
@@ -92,12 +81,10 @@ Use clear formatting, avoid filler text, and focus only on the structured plan.'
         agents=[research_agent, plan_agent],
         prompt=(
             """You are a supervisor managing two agents: a research agent (for web search and latest info) and a plan agent (for generating the personalized plan). \
-Your job is to ensure the user receives a structured, detailed fitness and meal plan. \
-Workflow:\n1. After receiving user details, assess whether to use the research_agent for more information.\n2. Once findings are collected, pass all info to the plan_agent.\n3. Return ONLY the full plan generated by the plan_agent as the final output. \
-Do not add any other content or commentary."""
+Your primary role is to ensure the user receives a perfect, well-structured, and comprehensive fitness and nutrition plan. \
+Workflow:\n1. When you receive user details, first consider if the 'research_agent' needs to be invoked to gather more information related to the user's goal, diet, or health conditions before the 'plan_agent' can create a comprehensive plan.\n2. After research, ensure all relevant user data and research findings are available in the messages before handing off to the 'plan_agent'.\n3. The 'plan_agent' will then generate the final personalized plan. Your FINAL output to the user MUST be ONLY the generated plan from the 'plan_agent', without any additional conversational text or preambles from yourself. Ensure the plan is complete and well-formatted. Do not do any work yourself beyond orchestrating the agents and presenting the final plan."""
         ),
         add_handoff_back_messages=True,
         output_mode="full_history",
     ).compile()
-
-    return supervisor
+    return supervisor 
