@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_tavily import TavilySearch
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, BaseMessage, AIMessage, FunctionMessage
@@ -10,22 +10,30 @@ from langchain_core.tools import tool
 
 load_dotenv()
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-if GROQ_API_KEY:
-    os.environ["GROQ_API_KEY"] = GROQ_API_KEY
+if GOOGLE_API_KEY:
+    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
 if TAVILY_API_KEY:
     os.environ["TAVILY_API_KEY"] = TAVILY_API_KEY
 
 def initialize_workflow():
     web_search = TavilySearch(max_results=3) if TAVILY_API_KEY else None
 
-    llm = ChatGroq(model_name="llama-3.3-70b-versatile", max_tokens=5000)
+    llm = ChatGoogleGenerativeAI(model="models/gemini-1.5-pro", temperature=0.2, max_output_tokens=2048)
 
     research_agent_prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are a research agent. Use Tavily to fetch the latest, most relevant fitness and nutrition information for the user's needs. Summarize findings clearly and concisely for the plan generator. If you can provide a direct answer from your knowledge base or research, do so. Otherwise, indicate if further research is needed or if you are done."""
-        ),
+        ("system", '''You are a research agent. Use Tavily to fetch the latest, most relevant fitness and nutrition information for the user's needs in India. 
+- Always prioritize up-to-date, actionable data from current sources, including:
+    - Popular diets and food preferences in India
+    - Average gym membership costs and home workout alternatives
+    - Budget-friendly, locally available foods and prices in INR
+    - Effective exercises tailored to different goals (weight loss, muscle gain, endurance)
+    - Culturally relevant meals and affordable substitutions
+    - Scientific findings or official guidelines
+- Provide accurate data with links to sources where available.
+- Keep answers structured and concise. If research is complete, indicate readiness.'''),
         MessagesPlaceholder(variable_name="messages"),
     ])
 
@@ -35,33 +43,41 @@ def initialize_workflow():
         prompt=research_agent_prompt,
         name="research_agent",
     )
-    
+
     plan_prompt = ChatPromptTemplate.from_messages([
-        ("system", 
-            """You are a world-class fitness coach and nutritionist. Your task is to create a highly personalized, actionable, and safe gym training and nutrition plan. 
-            You will receive the user's details and potentially research findings in the conversation history within the 'messages' variable. 
-            Carefully extract all necessary information from the `HumanMessage` that starts with "User details:" and any `AIMessage` or `FunctionMessage` from the `research_agent` or tools. 
-            Ensure all required fields for the plan are identified from these messages. 
-            
-            Your output MUST be a comprehensive, well-structured fitness and nutrition plan, using clear markdown headings and bullet points. DO NOT include any conversational filler, introductory, or concluding remarks. Just provide the plan.
-            The plan should include:
-            
-            # Weekly Gym Training Plan
-            (Detailed exercises with sets, reps, rest for each day of the week, including rest days)
-            
-            # Daily Meal Plan
-            (Detailed meal plan for each day, covering breakfast, lunch, dinner, and snacks, with nutrition breakdown and food suggestions)
-            
-            # Lifestyle Tips
-            (Practical tips on hydration, sleep, stress management, etc.)
-            
-            # Summary
-            (Key highlights and main recommendations of the plan)
-            
-            If you used any recent research or web data (from the research agent), ensure it's cited within the plan. If any information seems missing or unclear from the input messages, state it clearly in a brief note at the beginning of your plan, but proceed with the plan using the best available information."""
-        ),
+        ("system", '''You are a certified fitness coach and nutrition expert. Create a personalized weekly gym training and daily meal plan for the user based on provided inputs and research findings.
+Output format must be markdown with proper headings and bullet points.
+
+The plan must include:
+
+# 🏋️ Weekly Gym Training Plan
+- Break down the weekly workout by day.
+- For each day, specify:
+    - Target muscle group or focus (e.g., legs, push, cardio)
+    - Exercises with sets × reps × rest time
+    - Home and gym variations
+    - Estimated daily cost for gym usage (in ₹ INR)
+
+# 🍽️ Daily Meal Plan
+- For each day (Mon–Sun), include:
+    - Breakfast, lunch, dinner, snacks
+    - Calories per meal
+    - Key nutrients (protein, carbs, fats)
+    - Price per meal in ₹ INR (based on average Indian prices)
+
+# 🧘 Lifestyle & Wellness Tips
+- Tips for hydration, sleep, stress, recovery
+- Tips for staying healthy and on budget in India
+
+# 💡 Summary
+- Weekly calorie intake
+- Total weekly food cost (₹)
+- Total weekly gym cost (₹)
+- Key recommendations and scientific insights used (with links if available)
+
+Use clear formatting, avoid filler text, and focus only on the structured plan.'''),
         MessagesPlaceholder(variable_name="messages"),
-        ("human", "Generate the personalized gym training and nutrition plan based on the extracted user details and research findings.")
+        ("human", "Generate the personalized gym and nutrition plan using the details and research provided."),
     ])
 
     plan_agent = create_react_agent(
@@ -75,15 +91,13 @@ def initialize_workflow():
         model=llm,
         agents=[research_agent, plan_agent],
         prompt=(
-            """You are a supervisor managing two agents: a research agent (for web search and latest info) and a plan agent (for generating the personalized plan). 
-            Your primary role is to ensure the user receives a perfect, well-structured, and comprehensive fitness and nutrition plan. 
-            
-            Workflow:
-            1. When you receive user details, first consider if the 'research_agent' needs to be invoked to gather more information related to the user's goal, diet, or health conditions before the 'plan_agent' can create a comprehensive plan.
-            2. After research, ensure all relevant user data and research findings are available in the messages before handing off to the 'plan_agent'.
-            3. The 'plan_agent' will then generate the final personalized plan. Your FINAL output to the user MUST be ONLY the generated plan from the 'plan_agent', without any additional conversational text or preambles from yourself. Ensure the plan is complete and well-formatted. Do not do any work yourself beyond orchestrating the agents and presenting the final plan."""
+            """You are a supervisor managing two agents: a research agent (for web search and latest info) and a plan agent (for generating the personalized plan). \
+Your job is to ensure the user receives a structured, detailed fitness and meal plan. \
+Workflow:\n1. After receiving user details, assess whether to use the research_agent for more information.\n2. Once findings are collected, pass all info to the plan_agent.\n3. Return ONLY the full plan generated by the plan_agent as the final output. \
+Do not add any other content or commentary."""
         ),
         add_handoff_back_messages=True,
         output_mode="full_history",
     ).compile()
-    return supervisor 
+
+    return supervisor

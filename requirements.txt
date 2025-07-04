@@ -5,4 +5,7 @@ langgraph-supervisor
 langchain-groq
 langchain-tavily
 langchain-core
-pydantic 
+pydantic
+streamlit
+streamlit-extras
+langchain-google-genai 

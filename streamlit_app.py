@@ -3,7 +3,7 @@ from streamlit_extras.let_it_rain import rain
 from streamlit_extras.colored_header import colored_header
 from streamlit_extras.stylable_container import stylable_container
 import time
-import workflow
+import workflow as workflow
 from langchain_core.messages import HumanMessage, AIMessage
 
 st.set_page_config(
@@ -13,38 +13,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for full-page gradient and modern font
-st.markdown(
-    """
-    <style>
-    body {
-        background: linear-gradient(120deg, #f8fafc 0%, #e0e7ff 100%) !important;
-        font-family: 'Montserrat', 'Segoe UI', Arial, sans-serif !important;
-    }
-    .stApp {
-        background: linear-gradient(120deg, #f8fafc 0%, #e0e7ff 100%) !important;
-    }
-    .st-bb, .st-cq, .st-cp, .st-cq, .st-cr, .st-cs {
-        font-family: 'Montserrat', 'Segoe UI', Arial, sans-serif !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# Animated header
 colored_header(
     label="FitMind AI",
     description="Your Personalized Gym & Diet Plan Generator",
     color_name="violet-70"
 )
 
-rain(
-    emoji="💪",
-    font_size=32,
-    falling_speed=5,
-    animation_length="infinite"
-)
 
 with stylable_container(
     key="main_form",
@@ -56,7 +30,7 @@ with stylable_container(
         margin-bottom: 2rem;
     """
 ):
-    st.markdown("## <span style='font-family:Montserrat; color:#7c3aed;'>Enter Your Profile</span>", unsafe_allow_html=True)
+    st.markdown("## Enter Your Profile")
     with st.form("user_profile_form"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -108,27 +82,7 @@ if submitted:
             if final_plan:
                 st.success("Here is your personalized plan!", icon="🤩")
                 st.markdown(f"**User Profile:**  \nName: {name}  \nAge: {age}  \nGender: {gender}  \nWeight: {weight}kg  \nHeight: {height}cm  \nBMI: {bmi} ({bmi_status})  \nFitness Goal: {fitness_goal}  \nExperience: {experience}  \nWorkout Time: {workout_time}  \nDiet: {diet}  \nAllergies: {allergies or 'None'}  \nHealth Conditions: {health_conditions or 'None'}")
-                # Use expanders for each plan section
-                import re
-                sections = re.split(r'(?=^# )', final_plan, flags=re.MULTILINE)
-                for section in sections:
-                    if section.strip():
-                        header_match = re.match(r'^# (.+)', section.strip())
-                        if header_match:
-                            header = header_match.group(1)
-                            icon = ""
-                            if "Gym" in header:
-                                icon = "🏋️"
-                            elif "Meal" in header:
-                                icon = "🍽️"
-                            elif "Lifestyle" in header:
-                                icon = "💡"
-                            elif "Summary" in header:
-                                icon = "📝"
-                            with st.expander(f"{icon} {header}", expanded=True):
-                                st.markdown(section.strip())
-                        else:
-                            st.markdown(section.strip())
+                st.markdown(final_plan)
                 st.balloons()
             else:
                 st.error("The AI agent did not generate a comprehensive plan. Please try again or refine your input.")
